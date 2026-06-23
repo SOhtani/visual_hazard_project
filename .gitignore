@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.env
+
+# Data and generated outputs
+/data/raw*/
+/data/derived/
+/data/analysis/
+/reports/
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.png
+*.jpg
+*.jpeg
+*.tif
+*.tiff
+
+# Keep templates
+!/data/templates/
+!/data/templates/*.csv
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
