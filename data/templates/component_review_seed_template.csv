@@ -1,0 +1,2 @@
+review_id,review_set_version,case_id,sample_time_sec,frame_index,image_path,roi_x0,roi_y0,roi_x1,roi_y1,target_component,candidate_label,selection_type,source_score_col,source_score_value,source_rank_within_score,selection_reason,metric_status,component_interpretation,manual_include,manual_primary_label,manual_notes
+,phase02_v1,CASE000,,,,,,,,manual_component,manual_candidate,manual,,,,manual_seed,,Manual seed row; replace with real frame information,,,

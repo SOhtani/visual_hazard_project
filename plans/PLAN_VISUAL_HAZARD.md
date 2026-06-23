@@ -394,7 +394,11 @@ Acceptance criteria:
 Status:
 
 ```text
-Next phase.
+In progress in phase-02-component-review-set branch.
+Initial scripts added:
+- scripts/06_build_component_review_set.py
+- scripts/07_export_component_review_sheets.py
+- docs/PHASE_02_COMPONENT_REVIEW_SET.md
 ```
 
 ---
@@ -723,5 +727,16 @@ Current status:
 ```text
 Phase 0: done
 Phase 1: done in bootstrap v2
-Phase 2: next
+Phase 2: in progress
 ```
+
+### 2026-06-24 Phase 2 update
+
+Added component-specific review set scaffolding:
+
+- `scripts/06_build_component_review_set.py` selects high-score and low-score candidate frames per component metric.
+- `scripts/07_export_component_review_sheets.py` exports montage sheets grouped by target component and selection direction.
+- `docs/PHASE_02_COMPONENT_REVIEW_SET.md` defines commands, acceptance criteria, and manual curation rules.
+- `data/templates/component_review_seed_template.csv` allows manually seeded examples to be appended.
+- Generated `data/annotations/` and `reports/` outputs remain ignored by Git to avoid committing surgical images or local paths.
+

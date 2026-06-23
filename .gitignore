@@ -8,6 +8,7 @@ __pycache__/
 /data/raw*/
 /data/derived/
 /data/analysis/
+/data/annotations/
 /reports/
 *.mp4
 *.mov
