@@ -162,3 +162,10 @@ Phase 2 is complete when:
 - Do not treat blackness as validated anthracosis.
 - Do not treat low-focus center area as validated obstruction.
 - Do not start clinical outcome analysis before component behavior is understood.
+
+## Phase 2B image-validity candidate columns
+
+After initial montage review, use Phase 2B to add candidate-only image validity flags such as `large_whiteout_candidate_v1`, `large_blackout_candidate_v1`, `near_uniform_frame_candidate_v1`, and `color_bar_or_test_pattern_candidate_v1`. These flags are carried into the review CSV and displayed on montage sheets. They are not ground-truth labels and are not enabled as hard filters by default.
+
+For the current `per_frame_manual_roi` input, SurgCap `OutsideBody` intervals had zero exact overlap with the metric CSV rows in the tested cases. Therefore, workflow-based extracorporeal exclusion is not part of this phase. See `PHASE_02B_IMAGE_VALIDITY_GATE.md`.
+

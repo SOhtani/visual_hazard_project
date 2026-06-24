@@ -110,6 +110,20 @@ DEFAULT_SCORE_SPECS: List[ScoreSpec] = [
 ]
 
 
+VALIDITY_CONTEXT_COLUMNS = [
+    "roi_gray_std_v1",
+    "roi_edge_density_v1",
+    "roi_gray_entropy_bits_v1",
+    "near_uniform_frame_candidate_v1",
+    "large_whiteout_candidate_v1",
+    "large_blackout_candidate_v1",
+    "color_bar_or_test_pattern_candidate_v1",
+    "photometric_failure_candidate_v1",
+    "image_validity_problem_candidate_v1",
+    "component_review_valid_candidate_v1",
+]
+
+
 CORE_OUTPUT_COLUMNS = [
     "review_id",
     "review_set_version",
@@ -129,6 +143,7 @@ CORE_OUTPUT_COLUMNS = [
     "source_rank_within_score",
     "selection_reason",
     "metric_status",
+    *VALIDITY_CONTEXT_COLUMNS,
     "component_interpretation",
     "manual_include",
     "manual_primary_label",
@@ -199,6 +214,19 @@ def parse_args() -> argparse.Namespace:
         help="Drop duplicate image_path + target_component rows after selection.",
     )
     parser.add_argument(
+        "--use-image-validity-filter",
+        action="store_true",
+        help=(
+            "Optionally exclude candidate-only image-validity problem frames for non-photometric "
+            "components. Default is off; use this only after montage review."
+        ),
+    )
+    parser.add_argument(
+        "--print-validity-summary",
+        action="store_true",
+        help="Print candidate image-validity flag counts if columns are present.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print summary without writing output CSV.",
@@ -247,6 +275,55 @@ def load_metric_frames(metrics_dir: Path, case_filter: Optional[set[str]]) -> pd
         df["source_metric_csv"] = str(path)
         dfs.append(df)
     return pd.concat(dfs, ignore_index=True, sort=False)
+
+
+
+def flag_series(df: pd.DataFrame, col: str) -> pd.Series:
+    if col not in df.columns:
+        return pd.Series(False, index=df.index)
+    return pd.to_numeric(df[col], errors="coerce").fillna(0.0) >= 0.5
+
+
+def print_validity_summary(df: pd.DataFrame) -> None:
+    cols = [c for c in VALIDITY_CONTEXT_COLUMNS if c in df.columns and c.endswith("_candidate_v1")]
+    if not cols:
+        print("Image validity candidate columns: not found. Rerun 05_compute_frame_visual_hazard_components.py to add them.")
+        return
+    print("Image validity candidate summary:")
+    for col in cols:
+        vals = pd.to_numeric(df[col], errors="coerce")
+        print(f"  {col}: {int((vals >= 0.5).sum())}/{len(df)}")
+
+
+def apply_image_validity_filter(df: pd.DataFrame, spec: ScoreSpec) -> pd.DataFrame:
+    """Optional triage filter for component review candidates.
+
+    Photometric components should retain the photometric failures they are meant
+    to detect. For other components, extreme acquisition/problem candidates can
+    dominate high-score selection, so this optional filter removes them. This is
+    deliberately not enabled by default.
+    """
+    photometric_targets = {"whiteout", "low_light_or_blackout"}
+    if spec.target_component in photometric_targets:
+        return df
+
+    problem = flag_series(df, "color_bar_or_test_pattern_candidate_v1")
+    if spec.target_component not in {"specular_like_reflection"}:
+        problem = problem | flag_series(df, "large_whiteout_candidate_v1")
+    problem = problem | flag_series(df, "large_blackout_candidate_v1")
+
+    # Near-uniform frames are informative for center_low_structure_area but are
+    # often unhelpful for reblur/veil/blackness component validation.
+    if spec.target_component in {
+        "reblur_response_loss",
+        "veil_low_contrast",
+        "raw_blackness",
+        "corrected_blackness",
+        "anthracosis_like_blackness_candidate",
+    }:
+        problem = problem | flag_series(df, "near_uniform_frame_candidate_v1")
+
+    return df.loc[~problem].copy()
 
 
 def select_with_per_case_cap(
@@ -336,6 +413,8 @@ def build_output_rows(
             "manual_primary_label": "",
             "manual_notes": "",
         }
+        for col in VALIDITY_CONTEXT_COLUMNS:
+            out[col] = get_value(row, col)
         rows.append(out)
     return rows
 
@@ -390,6 +469,9 @@ def main() -> None:
     if "metric_status" in df.columns:
         df = df[(df["metric_status"].isna()) | (df["metric_status"].astype(str) == "ok")].copy()
 
+    if args.print_validity_summary:
+        print_validity_summary(df)
+
     specs = specs_from_args(args.score_col)
     rows: List[dict] = []
     skipped = []
@@ -397,8 +479,9 @@ def main() -> None:
         if spec.score_col not in df.columns:
             skipped.append(spec.score_col)
             continue
-        high = select_with_per_case_cap(df, spec.score_col, args.n_high, ascending=False, per_case_cap=args.per_case_cap)
-        low = select_with_per_case_cap(df, spec.score_col, args.n_low, ascending=True, per_case_cap=args.per_case_cap)
+        candidate_df = apply_image_validity_filter(df, spec) if args.use_image_validity_filter else df
+        high = select_with_per_case_cap(candidate_df, spec.score_col, args.n_high, ascending=False, per_case_cap=args.per_case_cap)
+        low = select_with_per_case_cap(candidate_df, spec.score_col, args.n_low, ascending=True, per_case_cap=args.per_case_cap)
         rows.extend(build_output_rows(high, spec, "high", spec.high_label, args.review_set_version))
         rows.extend(build_output_rows(low, spec, "low", spec.low_label, args.review_set_version))
 
@@ -409,6 +492,10 @@ def main() -> None:
         out_df = out_df.drop_duplicates(subset=["image_path", "target_component"], keep="first").reset_index(drop=True)
 
     print(f"Loaded frames: {len(df)}")
+    if args.use_image_validity_filter:
+        print("Image validity filter: ON for non-photometric component candidate selection")
+    else:
+        print("Image validity filter: OFF (candidate flags are carried through for review only)")
     print(f"Selected review rows: {len(out_df)}")
     if skipped:
         print("Skipped missing score columns:", ", ".join(skipped))

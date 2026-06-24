@@ -45,3 +45,8 @@ python .\scripts\07_export_component_review_sheets.py `
 ```
 
 Generated annotations and review images may contain local paths, case identifiers, and surgical images. They are intentionally ignored by Git.
+
+## Phase 2B image validity candidate flags
+
+Phase 2B adds candidate-only image validity flags for component review. It does not use workflow phase annotations to exclude frames. See `docs/PHASE_02B_IMAGE_VALIDITY_GATE.md`.
+

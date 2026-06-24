@@ -27,6 +27,18 @@ BLACKNESS_RAW_V_THR = 0.25
 BLACKNESS_CORRECTED_THR = 0.25
 BLACKNESS_RAW_MAXRGB_MIN = 0.02
 
+# Candidate-only image validity thresholds for component review. These are not
+# clinical labels. They are intentionally conservative flags for montage review.
+EDGE_DENSITY_GRAD_THR = 0.08
+NEAR_UNIFORM_GRAY_STD_THR = 0.035
+NEAR_UNIFORM_ENTROPY_BITS_THR = 2.20
+NEAR_UNIFORM_EDGE_DENSITY_THR = 0.010
+LARGE_WHITEOUT_RATIO_THR = 0.50
+LARGE_BLACKOUT_RATIO_THR = 0.50
+COLOR_BAR_HIGH_SAT_RATIO_THR = 0.35
+COLOR_BAR_HUE_ENTROPY_BITS_THR = 2.20
+COLOR_BAR_GRAY_ENTROPY_BITS_MAX = 5.50
+
 
 @dataclass
 class Config:
@@ -496,6 +508,123 @@ def summarize_auxiliary_metrics(local_maps: Dict[str, np.ndarray]) -> Dict[str, 
     }
 
 
+def entropy_bits_from_unit_array(values: np.ndarray, bins: int = 256) -> float:
+    """Return Shannon entropy in bits for a finite array scaled to [0, 1]."""
+    x = np.asarray(values, dtype=np.float32).ravel()
+    x = x[np.isfinite(x)]
+    if x.size == 0:
+        return float("nan")
+    hist, _ = np.histogram(np.clip(x, 0.0, 1.0), bins=bins, range=(0.0, 1.0))
+    p = hist.astype(np.float64) / max(float(hist.sum()), 1.0)
+    p = p[p > 0]
+    if p.size == 0:
+        return 0.0
+    return float(-(p * np.log2(p)).sum())
+
+
+def hue_entropy_bits(hue: np.ndarray, sat: np.ndarray, val: np.ndarray) -> float:
+    """Entropy of hue among colored pixels. OpenCV RGB HSV hue is degrees in [0, 360)."""
+    h = np.asarray(hue, dtype=np.float32).ravel()
+    s = np.asarray(sat, dtype=np.float32).ravel()
+    v = np.asarray(val, dtype=np.float32).ravel()
+    mask = np.isfinite(h) & np.isfinite(s) & np.isfinite(v) & (s >= 0.45) & (v >= 0.15)
+    if int(mask.sum()) < 32:
+        return 0.0
+    hist, _ = np.histogram(h[mask] % 360.0, bins=36, range=(0.0, 360.0))
+    p = hist.astype(np.float64) / max(float(hist.sum()), 1.0)
+    p = p[p > 0]
+    if p.size == 0:
+        return 0.0
+    return float(-(p * np.log2(p)).sum())
+
+
+def compute_image_validity_candidate_metrics(
+    roi_rgb_u8: np.ndarray,
+    aux_metrics: Dict[str, float],
+) -> Dict[str, float]:
+    """Compute candidate image-validity flags for component-review triage.
+
+    These flags are deliberately named as candidates. They should help identify
+    frames that can distort component validation, but they are not ground-truth
+    labels and should not be used as final exclusion criteria without montage
+    review.
+    """
+    gray = rgb_to_gray_float(roi_rgb_u8)
+    hsv = rgb_to_hsv_float(roi_rgb_u8)
+    hue = hsv[..., 0]
+    sat = hsv[..., 1]
+    val = hsv[..., 2]
+
+    gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+    grad_mag = np.sqrt(gx * gx + gy * gy)
+
+    roi_gray_mean_v1 = float(np.mean(gray))
+    roi_gray_std_v1 = float(np.std(gray))
+    roi_v_mean_v1 = float(np.mean(val))
+    roi_v_std_v1 = float(np.std(val))
+    roi_s_mean_v1 = float(np.mean(sat))
+    roi_edge_density_v1 = float(np.mean(grad_mag >= EDGE_DENSITY_GRAD_THR))
+    roi_gray_entropy_bits_v1 = entropy_bits_from_unit_array(gray, bins=256)
+    roi_high_saturation_ratio_v1 = float(np.mean((sat >= 0.45) & (val >= 0.15)))
+    roi_hue_entropy_bits_v1 = hue_entropy_bits(hue, sat, val)
+
+    whiteout_ratio = float(aux_metrics.get("saturation_ratio", np.nan))
+    whiteout_center = float(aux_metrics.get("whiteout_center_weighted_ratio_v1", np.nan))
+    low_light_ratio = float(aux_metrics.get("low_light_or_blackout_ratio_v1", np.nan))
+    low_light_center = float(aux_metrics.get("low_light_center_weighted_ratio_v1", np.nan))
+
+    large_whiteout_candidate_v1 = float(
+        (np.isfinite(whiteout_ratio) and whiteout_ratio >= LARGE_WHITEOUT_RATIO_THR)
+        or (np.isfinite(whiteout_center) and whiteout_center >= LARGE_WHITEOUT_RATIO_THR)
+    )
+    large_blackout_candidate_v1 = float(
+        (np.isfinite(low_light_ratio) and low_light_ratio >= LARGE_BLACKOUT_RATIO_THR)
+        or (np.isfinite(low_light_center) and low_light_center >= LARGE_BLACKOUT_RATIO_THR)
+    )
+    near_uniform_frame_candidate_v1 = float(
+        (
+            roi_gray_std_v1 <= NEAR_UNIFORM_GRAY_STD_THR
+            and roi_edge_density_v1 <= NEAR_UNIFORM_EDGE_DENSITY_THR
+        )
+        or (np.isfinite(roi_gray_entropy_bits_v1) and roi_gray_entropy_bits_v1 <= NEAR_UNIFORM_ENTROPY_BITS_THR)
+    )
+    color_bar_or_test_pattern_candidate_v1 = float(
+        roi_high_saturation_ratio_v1 >= COLOR_BAR_HIGH_SAT_RATIO_THR
+        and roi_hue_entropy_bits_v1 >= COLOR_BAR_HUE_ENTROPY_BITS_THR
+        and roi_gray_entropy_bits_v1 <= COLOR_BAR_GRAY_ENTROPY_BITS_MAX
+    )
+
+    photometric_failure_candidate_v1 = float(
+        bool(large_whiteout_candidate_v1) or bool(large_blackout_candidate_v1)
+    )
+    image_validity_problem_candidate_v1 = float(
+        bool(photometric_failure_candidate_v1)
+        or bool(near_uniform_frame_candidate_v1)
+        or bool(color_bar_or_test_pattern_candidate_v1)
+    )
+    component_review_valid_candidate_v1 = float(not bool(image_validity_problem_candidate_v1))
+
+    return {
+        "roi_gray_mean_v1": roi_gray_mean_v1,
+        "roi_gray_std_v1": roi_gray_std_v1,
+        "roi_v_mean_v1": roi_v_mean_v1,
+        "roi_v_std_v1": roi_v_std_v1,
+        "roi_s_mean_v1": roi_s_mean_v1,
+        "roi_edge_density_v1": roi_edge_density_v1,
+        "roi_gray_entropy_bits_v1": roi_gray_entropy_bits_v1,
+        "roi_high_saturation_ratio_v1": roi_high_saturation_ratio_v1,
+        "roi_hue_entropy_bits_v1": roi_hue_entropy_bits_v1,
+        "near_uniform_frame_candidate_v1": near_uniform_frame_candidate_v1,
+        "large_whiteout_candidate_v1": large_whiteout_candidate_v1,
+        "large_blackout_candidate_v1": large_blackout_candidate_v1,
+        "color_bar_or_test_pattern_candidate_v1": color_bar_or_test_pattern_candidate_v1,
+        "photometric_failure_candidate_v1": photometric_failure_candidate_v1,
+        "image_validity_problem_candidate_v1": image_validity_problem_candidate_v1,
+        "component_review_valid_candidate_v1": component_review_valid_candidate_v1,
+    }
+
+
 def calc_patch_entropy(gray_patch_u8: np.ndarray) -> float:
     hist = cv2.calcHist([gray_patch_u8], [0], None, [256], [0, 256]).ravel().astype(np.float64)
     p = hist / max(hist.sum(), 1.0)
@@ -678,8 +807,28 @@ def process_one_row(row: pd.Series, config: Config) -> Dict[str, object]:
             "blackness_raw_center_weighted_ratio_v1",
             "anthracosis_like_blackness_candidate_v1",
             "anthracosis_like_blackness_center_weighted_candidate_v1",
+            "roi_gray_mean_v1",
+            "roi_gray_std_v1",
+            "roi_v_mean_v1",
+            "roi_v_std_v1",
+            "roi_s_mean_v1",
+            "roi_edge_density_v1",
+            "roi_gray_entropy_bits_v1",
+            "roi_high_saturation_ratio_v1",
+            "roi_hue_entropy_bits_v1",
+            "near_uniform_frame_candidate_v1",
+            "large_whiteout_candidate_v1",
+            "large_blackout_candidate_v1",
+            "color_bar_or_test_pattern_candidate_v1",
+            "photometric_failure_candidate_v1",
+            "image_validity_problem_candidate_v1",
+            "component_review_valid_candidate_v1",
         ]:
             out[c] = float("nan")
+        out["large_blackout_candidate_v1"] = 1.0
+        out["photometric_failure_candidate_v1"] = 1.0
+        out["image_validity_problem_candidate_v1"] = 1.0
+        out["component_review_valid_candidate_v1"] = 0.0
         return out
 
     x0, y0, x1, y1 = roi
@@ -695,6 +844,10 @@ def process_one_row(row: pd.Series, config: Config) -> Dict[str, object]:
         reblur_sigma=config.reblur_sigma,
     )
     aux_metrics = summarize_auxiliary_metrics(aux_maps)
+    validity_metrics = compute_image_validity_candidate_metrics(
+        roi_rgb_u8=roi_rgb,
+        aux_metrics=aux_metrics,
+    )
 
     focus_metrics = compute_focus_badness_v1_for_roi(
         roi_rgb_u8=roi_rgb,
@@ -704,6 +857,7 @@ def process_one_row(row: pd.Series, config: Config) -> Dict[str, object]:
     )
 
     out.update(aux_metrics)
+    out.update(validity_metrics)
     out.update(focus_metrics)
 
     out["local_obstruction_ratio"] = float(out["focus_lost_center_weighted_ratio"])

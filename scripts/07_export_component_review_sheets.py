@@ -82,8 +82,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--label-height",
         type=int,
-        default=82,
-        help="Label panel height under each tile. Default: 82",
+        default=102,
+        help="Label panel height under each tile. Default: 102",
     )
     parser.add_argument(
         "--crop-roi",
@@ -190,6 +190,31 @@ def wrap_text(text: str, max_chars: int) -> list[str]:
     return parts[:4]
 
 
+
+def candidate_flag_is_true(row: pd.Series, col: str) -> bool:
+    value = parse_float(row, col)
+    return value is not None and value >= 0.5
+
+
+def validity_flag_text(row: pd.Series) -> str:
+    flags = []
+    if candidate_flag_is_true(row, "large_whiteout_candidate_v1"):
+        flags.append("WU")
+    if candidate_flag_is_true(row, "large_blackout_candidate_v1"):
+        flags.append("BO")
+    if candidate_flag_is_true(row, "near_uniform_frame_candidate_v1"):
+        flags.append("UNI")
+    if candidate_flag_is_true(row, "color_bar_or_test_pattern_candidate_v1"):
+        flags.append("CB/TP")
+    if candidate_flag_is_true(row, "image_validity_problem_candidate_v1"):
+        flags.append("VALID?N")
+    if not flags:
+        if "component_review_valid_candidate_v1" in row.index:
+            return "validity flags: none"
+        return ""
+    return "validity flags: " + ",".join(flags)
+
+
 def make_tile(row: pd.Series, args: argparse.Namespace) -> np.ndarray:
     path = str(row.get("image_path", ""))
     img = read_image_bgr(path, args.missing_ok, args.tile_width, args.tile_height)
@@ -224,6 +249,9 @@ def make_tile(row: pd.Series, args: argparse.Namespace) -> np.ndarray:
         f"{review_id} | {case_id} | t={t}",
         f"{score_col}: {score_txt}",
     ]
+    flag_txt = validity_flag_text(row)
+    if flag_txt:
+        lines.append(flag_txt)
     lines.extend(wrap_text(str(label), max_chars=46)[:2])
 
     y = 18
