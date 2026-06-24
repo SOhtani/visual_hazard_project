@@ -100,13 +100,6 @@ DEFAULT_SCORE_SPECS: List[ScoreSpec] = [
         low_label="candidate_corrected_blackness_low",
         interpretation="Higher values suggest blackness after illumination normalization; still not validated anthracosis.",
     ),
-    ScoreSpec(
-        target_component="anthracosis_like_blackness_candidate",
-        score_col="anthracosis_like_blackness_candidate_v1",
-        high_label="candidate_anthracosis_like_blackness_high",
-        low_label="candidate_anthracosis_like_blackness_low",
-        interpretation="Higher values suggest blackness retained after simple raw/corrected filtering; manual validation required.",
-    ),
 ]
 
 
@@ -319,7 +312,6 @@ def apply_image_validity_filter(df: pd.DataFrame, spec: ScoreSpec) -> pd.DataFra
         "veil_low_contrast",
         "raw_blackness",
         "corrected_blackness",
-        "anthracosis_like_blackness_candidate",
     }:
         problem = problem | flag_series(df, "near_uniform_frame_candidate_v1")
 

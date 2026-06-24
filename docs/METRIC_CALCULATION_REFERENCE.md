@@ -21,7 +21,7 @@ Clinical interpretations such as blood, smoke, glare, anthracosis, or obstructio
 | `low_light_or_blackout_ratio_v1` | new | implemented in bootstrap v2 | Raw very-low-value pixel ratio |
 | `blackness_raw_ratio_v1` | new | implemented in bootstrap v2 | Raw dark-pixel candidate ratio |
 | `blackness_corrected_ratio_v1` | new | implemented in bootstrap v2 | Dark-pixel candidate after illumination normalization |
-| `anthracosis_like_blackness_candidate_v1` | new | implemented in bootstrap v2 | Intersection of raw and corrected blackness candidates; not validated anthracosis |
+| `anthracosis_like_blackness_candidate_v1` | deferred | retained as output only | Generic persistent dark-area candidate; anthracosis quantification deferred until lung/pleural-surface mask is available |
 | `blood_like_redness_v1` | planned | not implemented | Red-dominant pixel candidate, inspired by PBP-like burden |
 | `visual_hazard_burden` | planned extension of current aggregation | not implemented | Severity x duration x task criticality |
 
@@ -156,11 +156,7 @@ low_light_center_weighted_ratio_v1 = center-weighted mean(low_light_mask)
 
 This is a photometric hazard metric, not anthracosis.
 
-## 8. Blackness / anthracosis-like candidate
-
-### Prior method basis
-
-Pleural anthracosis has been scored intraoperatively as no/dotted, linear, or patchy anthracosis, and quantified from images using black-region ratios. This supports measuring black field phenotype, but operating-room video has confounders such as shadows, instruments, underexposure, and camera borders.
+## 8. Blackness descriptors; anthracosis deferred
 
 ### Project method
 
@@ -169,7 +165,7 @@ Raw and corrected representations are kept separately:
 ```text
 blackness_raw_mask = raw V <= 0.25, excluding all-zero-like pixels
 blackness_corrected_mask = illum_corr <= 0.25 and raw V <= 0.35
-anthracosis_like_blackness_candidate = blackness_raw_mask AND blackness_corrected_mask
+persistent_dark_area_candidate = blackness_raw_mask AND blackness_corrected_mask
 ```
 
 Outputs:
@@ -178,11 +174,11 @@ Outputs:
 blackness_raw_ratio_v1
 blackness_corrected_ratio_v1
 blackness_raw_center_weighted_ratio_v1
-anthracosis_like_blackness_candidate_v1
-anthracosis_like_blackness_center_weighted_candidate_v1
+anthracosis_like_blackness_candidate_v1  # retained output; not a Phase 2 review target
+anthracosis_like_blackness_center_weighted_candidate_v1  # retained output; not a Phase 2 review target
 ```
 
-Do not interpret these as anthracosis until validated against manual labels that distinguish shadow, instruments, camera border, cautery, and true black deposits.
+Do not interpret any of these columns as anthracosis. Anthracosis quantification is deferred until lung or pleural-surface masking is available. In the current phase, use `raw_blackness` and `corrected_blackness` only as generic blackness descriptors.
 
 ## 9. Blood-like redness
 

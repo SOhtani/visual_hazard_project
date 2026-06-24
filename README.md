@@ -50,3 +50,5 @@ Generated annotations and review images may contain local paths, case identifier
 
 Phase 2B adds candidate-only image validity flags for component review. It does not use workflow phase annotations to exclude frames. See `docs/PHASE_02B_IMAGE_VALIDITY_GATE.md`.
 
+
+Note: anthracosis-specific quantification is deferred until a lung or pleural-surface mask is available. The current Phase 2 review set keeps generic `raw_blackness` and `corrected_blackness` descriptors, but does not include `anthracosis_like_blackness_candidate` as a default review target.

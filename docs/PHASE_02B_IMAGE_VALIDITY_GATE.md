@@ -114,6 +114,13 @@ python .\scripts\06_build_component_review_set.py `
   --print-validity-summary
 ```
 
+
+## Anthracosis candidate deferred
+
+The initial image-validity review showed that `anthracosis_like_blackness_candidate_v1` behaves as a generic persistent dark-area descriptor. Without a lung mask or pleural-surface mask, it cannot distinguish pleural anthracosis from blood, clot, instruments, shadows, FireFly/monochrome frames, or camera-border darkness. Therefore, `anthracosis_like_blackness_candidate` is removed from the default Phase 2 review targets.
+
+The underlying blackness columns may remain in metric CSVs for exploratory quality control, but anthracosis-specific quantification should be redesigned after anatomical masking is available.
+
 ## Interpretation rule
 
 Do not rename `near_uniform_frame_candidate_v1` as obstruction, smoke, fog, or poor field. It only means low variation / low edge / low entropy by image statistics.

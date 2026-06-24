@@ -12,7 +12,7 @@ Examples:
 
 - `whiteout_ratio_v1` may be interpreted as a raw photometric saturation burden.
 - `specular_like_ratio_v1` may be interpreted as a high-value / low-saturation pixel burden.
-- `anthracosis_like_blackness_candidate_v1` must not be interpreted as anthracosis until manually validated.
+- Anthracosis quantification is deferred until a lung or pleural-surface mask is available. Current blackness descriptors must not be interpreted as anthracosis.
 - `center_low_structure_area_v1` must not be interpreted as physical obstruction until manually validated.
 
 ## Inputs
@@ -117,11 +117,26 @@ After montage review, edit `component_review_frames.csv` locally:
 
 ```text
 manual_include: 1 or 0
-manual_primary_label: clear, whiteout, specular, shadow, anthracosis_like, blood_like, etc.
+manual_primary_label: clear, whiteout, specular, shadow, blackness, blood_like, etc.
 manual_notes: short reason for inclusion/exclusion
 ```
 
 Keep intentionally ambiguous examples. They are necessary for false-positive and false-negative analysis.
+
+
+## Deferred component: anthracosis
+
+`anthracosis_like_blackness_candidate` is no longer a default Phase 2 review target. The two-case montage review showed that the candidate behaves as a generic dark-area / blackness descriptor rather than a lung or pleural anthracosis metric. It should remain out of the default review set until a lung mask, pleural-surface mask, or equivalent anatomical region-of-interest constraint is available.
+
+The metric CSV may still contain raw/corrected blackness columns for exploratory analysis:
+
+```text
+blackness_raw_ratio_v1
+blackness_corrected_ratio_v1
+anthracosis_like_blackness_candidate_v1
+```
+
+Only `raw_blackness` and `corrected_blackness` are retained as Phase 2 blackness review targets. Do not use the anthracosis-like column for clinical interpretation or cutoff selection in the current phase.
 
 ## Required categories
 
@@ -135,12 +150,11 @@ whiteout / overexposure
 specular reflection
 low light / blackout
 blood-like redness
-anthracosis-like blackness
 instrument / tissue / clot obstruction
 low-information flat field
 bloody but usable field
 clean but not usable field
-dark shadow without anthracosis
+dark shadow / black instrument / camera border
 black instrument or camera border
 ```
 
@@ -159,7 +173,7 @@ Phase 2 is complete when:
 
 - Do not create a composite visual hazard score.
 - Do not treat blood-like redness as validated blood.
-- Do not treat blackness as validated anthracosis.
+- Do not treat blackness as anthracosis. Anthracosis-related measurement is out of scope for Phase 2 until a lung or pleural-surface mask is available.
 - Do not treat low-focus center area as validated obstruction.
 - Do not start clinical outcome analysis before component behavior is understood.
 
