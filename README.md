@@ -20,6 +20,7 @@ Do not construct a composite score until component-specific validation is comple
 Phase 0: legacy preservation - done
 Phase 1: component metric scaffold - done
 Phase 2: component-specific review set - in progress
+Phase 3: all-case distribution and candidate cutoff exploration - planned
 ```
 
 ## Phase 2 quick start
@@ -52,3 +53,16 @@ Phase 2B adds candidate-only image validity flags for component review. It does 
 
 
 Note: anthracosis-specific quantification is deferred until a lung or pleural-surface mask is available. The current Phase 2 review set keeps generic `raw_blackness` and `corrected_blackness` descriptors, but does not include `anthracosis_like_blackness_candidate` as a default review target.
+
+## Phase 3 all-case distribution summary
+
+Phase 3 applies the current component metric set to all available cases and summarizes distributions by case and SurgCap workflow phase. See `docs/PHASE_03_ALL_CASE_DISTRIBUTION_AND_CUTOFFS.md`.
+
+```powershell
+python .\scripts\08_summarize_phase_component_distributions.py `
+  --metrics-dir .\data\derived\quality_metrics\per_frame `
+  --annotation-root "C:\Users\SOhtani2024\SurgCap\surgcap-project\data\raw\videos" `
+  --output-dir .\reports\phase_component_distributions `
+  --include-legacy-badness
+```
+
