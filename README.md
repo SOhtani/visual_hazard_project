@@ -1,23 +1,19 @@
-# Visual hazard project update: Phase 07 analyzable frames and dataset expansion
+# Visual hazard project update: Phase 06B component cutoff audit
 
-This update adds two parallel tracks.
+Adds a component-level p95/p99 cutoff audit script:
 
-## Track A: analyzable-frame filter
+- `scripts/14_build_component_cutoff_audit_sets.py`
+- `docs/PHASE_06B_COMPONENT_CUTOFF_AUDIT.md`
 
-```text
-scripts/12_build_analyzable_frame_sets.py
-docs/PHASE_07_ANALYZABLE_FRAME_FILTER_AND_FIELD_PHENOTYPE.md
-```
+This phase audits how many frames each component would exclude at p95 and p99, how those frames are
+distributed across level-1 phases, and which frames should be visually reviewed around the cutoffs.
 
-This track treats the current Tier-1 visual-hazard gate as a preprocessing filter for downstream field-phenotype analysis.
+The main use is to decide whether visual hazard scores should be used as analyzable-frame filters
+before blood-like redness, blackness, anthracosis-like, and other field phenotype analyses.
 
-## Track B: expanded 2021-2025 dataset inventory
 
-```text
-scripts/13_build_expanded_dataset_inventory_template.py
-docs/DATASET_EXPANSION_2021_2025_PLAN.md
-```
+Patch notes:
 
-This track starts a review-ready inventory for a broader 2021-2025 cohort including RATS, VATS, and open surgery.
-
-Generated CSVs and reports should not be committed.
+- Adds `review_id` to `component_cutoff_review_frames.csv` for compatibility with `07_export_component_review_sheets.py`.
+- Adds `--phase-distribution-csv` for Level-1 phase summaries when `visual_hazard_frame_flags.csv` has no frame-level phase column.
+- Writes header-only phase summary CSVs instead of empty files when no phase source is available.
