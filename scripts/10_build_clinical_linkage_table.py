@@ -85,6 +85,31 @@ CLINICAL_KEYWORDS = [
     "ae",
 ]
 
+# Columns derived from visual-hazard computation must never be treated as
+# clinical variables in the clinical-vs-hazard correlation table.
+HAZARD_DERIVED_KEYWORDS = [
+    "visual_hazard",
+    "clean_reference",
+    "hazard_component",
+    "structural_visibility_loss",
+    "center_low_structure_area",
+    "whiteout",
+    "low_light",
+    "blackout",
+    "image_validity",
+    "component_count",
+    "composite_degradation",
+]
+
+PRIORITY_CLINICAL_COLS = [
+    "operation_time_min",
+    "blood_loss_g",
+    "age",
+    "手術時間 (分)",
+    "術中出血量(gr)",
+    "RATS_年齢",
+]
+
 
 def canonical_case_id(x) -> str | float:
     if pd.isna(x):
@@ -162,6 +187,11 @@ def numeric_columns(df: pd.DataFrame, exclude: Iterable[str] = ()) -> list[str]:
     return cols
 
 
+def is_hazard_derived_col(c: str) -> bool:
+    nc = norm_col(c)
+    return any(k in nc for k in HAZARD_DERIVED_KEYWORDS)
+
+
 def select_hazard_cols(df: pd.DataFrame) -> list[str]:
     cols = []
     for c in df.columns:
@@ -179,19 +209,49 @@ def select_hazard_cols(df: pd.DataFrame) -> list[str]:
     return ordered
 
 
-def select_clinical_numeric_cols(df: pd.DataFrame, case_col: str) -> list[str]:
-    nums = numeric_columns(df, exclude=[case_col, "case_id"])
-    # Prioritize clinical-looking fields, but retain all numeric metadata for exploration.
+def select_clinical_numeric_cols(
+    df: pd.DataFrame,
+    case_col: str,
+    candidate_cols: Iterable[str] | None = None,
+    explicit_cols: Iterable[str] = (),
+) -> list[str]:
+    """Select numeric clinical variables only.
+
+    If candidate_cols is provided, restrict selection to those metadata-derived
+    columns. This prevents visual-hazard burden columns from re-entering as
+    pseudo-clinical variables and producing self-correlations.
+    """
+    if candidate_cols is None:
+        work = df.copy()
+    else:
+        keep = [c for c in candidate_cols if c in df.columns]
+        work = df[keep].copy()
+
+    nums = numeric_columns(work, exclude=[case_col, "case_id"])
+    nums = [c for c in nums if not is_hazard_derived_col(c)]
+
+    # Preserve requested columns first, then standard priority clinical fields,
+    # then other numeric metadata for exploratory review.
+    out: list[str] = []
+    for c in explicit_cols:
+        if c in df.columns and c in nums and c not in out:
+            out.append(c)
+    for c in PRIORITY_CLINICAL_COLS:
+        if c in df.columns and c in nums and c not in out:
+            out.append(c)
+
     pri = []
     other = []
     for c in nums:
+        if c in out:
+            continue
         nc = norm_col(c)
         raw = str(c).lower()
         if any(k.lower() in nc or k.lower() in raw for k in CLINICAL_KEYWORDS):
             pri.append(c)
         else:
             other.append(c)
-    return pri + other
+    return out + pri + other
 
 
 def spearman_corr(x: pd.Series, y: pd.Series) -> float:
@@ -304,6 +364,12 @@ def main() -> None:
     ap.add_argument("--metadata-sheet", default=None, help="Excel sheet name/index for metadata.")
     ap.add_argument("--burden-case-col", default=None)
     ap.add_argument("--metadata-case-col", default=None)
+    ap.add_argument(
+        "--clinical-col",
+        nargs="*",
+        default=[],
+        help="Optional explicit clinical numeric columns to prioritize in correlation output.",
+    )
     ap.add_argument("--output-dir", type=Path, default=Path("reports/clinical_linkage"))
     args = ap.parse_args()
 
@@ -342,7 +408,12 @@ def main() -> None:
         # Avoid duplicate non-key columns by suffixing metadata columns.
         metadata_cols = [c for c in meta.columns if c != "case_id"]
         merged = burden.merge(meta, on="case_id", how="left", suffixes=("", "__metadata"))
-        clinical_numeric_cols = select_clinical_numeric_cols(merged, case_col="case_id")
+        clinical_numeric_cols = select_clinical_numeric_cols(
+            merged,
+            case_col="case_id",
+            candidate_cols=metadata_cols,
+            explicit_cols=args.clinical_col,
+        )
         pd.DataFrame(
             [
                 {"source": "burden", "case_col": burden_case_col, "n_cases": burden["case_id"].nunique()},
