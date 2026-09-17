@@ -1,0 +1,42 @@
+﻿diff --git a/README.md b/README.md
+index bd438c8..2e3eb4c 100644
+--- a/README.md
++++ b/README.md
+@@ -1,19 +1,26 @@
+ # Visual Hazard Project
+ 
+-## Phase 07 update: purpose-specific analyzable frame sets
++## Current workflow status
+ 
+-The component cutoff audit showed that p95 component thresholds are too broad for hard exclusion before field-phenotype analysis. The project therefore separates technical image exclusion, color-phenotype analyzability, structural analyzability, and clean-reference extraction.
++The project now separates visual hazard gates from downstream field phenotype metrics.
+ 
+-Run:
++- Tier-1 visual hazard gates are used mainly to define image analyzability strata.
++- p95 visual hazard is used for clean reference extraction.
++- p99 visual hazard is treated as severe obstruction / soft flag.
++- Color field phenotype metrics are computed on `color_phenotype_analyzable_frames_v1.csv`.
++
++## Phase 08: Color field phenotypes
++
++Compute blood-like redness and blackness phenotype candidates:
+ 
+ ```powershell
+-python .\scripts\12_build_purpose_specific_analyzable_frame_sets.py `
+-  --frame-flags .\reports\visual_hazard_burden\visual_hazard_frame_flags.csv `
+-  --output-dir .\reports\purpose_specific_analyzable_frame_sets `
+-  --annotation-output-dir .\data\annotations `
+-  --write-frame-manifests
++python .\scripts\13_compute_color_field_phenotypes.py `
++  --frame-csv .\data\annotations\color_phenotype_analyzable_frames_v1.csv `
++  --output-csv .\data\derived\field_phenotypes\per_frame\color_field_phenotypes_v1.csv `
++  --report-dir .\reports\color_field_phenotypes `
++  --review-csv .\data\annotations\color_field_phenotype_review_frames.csv `
++  --metrics-dir .\data\derived\quality_metrics\per_frame `
++  --write-review-csv
+ ```
+ 
+-Primary downstream phenotype metrics such as blood-like redness and blackness/anthracosis-like burden should use `color_phenotype_analyzable_frames_v1.csv` as the main denominator, with severe visual-hazard component flags retained as soft flags rather than universal exclusions.
+-
+-See `docs/PHASE_07_PURPOSE_SPECIFIC_ANALYZABLE_FRAME_SETS.md`.
++See `docs/PHASE_08_COLOR_FIELD_PHENOTYPES.md` for details.
