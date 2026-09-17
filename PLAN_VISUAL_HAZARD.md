@@ -1,11 +1,11 @@
-# PLAN_VISUAL_HAZARD.md
+﻿# PLAN_VISUAL_HAZARD.md
 
 # Task-critical visual hazard burden and field phenotype analysis in thoracic surgical videos
 
-Last updated: 2026-06-27  
-Project status: planning document v1.0  
-Current cohort: RATS anatomical lung resection, 68 analyzed cases, 519,198 analyzed frames  
-Current analytic stage: frame-level visual-hazard gate, case/phase burden summaries, and preliminary clinical linkage completed
+Last updated: 2026-09-17
+Project status: planning document v1.1 - measurement-validity-first redesign active
+Current cohort: RATS anatomical lung resection, 68 cases; 519,199 raw metric frames, 519,198 Phase 09 metric-status-eligible frames
+Current analytic stage: Phase 00 provenance audit substantially completed; Phase 01 surgeon reference-standard design next
 
 This document is the controlling planning document for the visual hazard project. Any coding agent should read this document before modifying scripts, metric definitions, file paths, clinical-linkage logic, or downstream analysis plans.
 
@@ -37,6 +37,336 @@ A. generic visual hazard gate
 B. phenotype-specific modules
 C. task-critical weighting
 D. clinical association analysis
+```
+
+---
+
+## 0.1 Active redesign: measurement-validity-first workflow
+
+**Effective date: 2026-09-17**
+
+This section defines the active execution order. The later historical plan is
+retained as long-term design context.
+
+Legacy analysis code and historical outputs must not be deleted or silently
+rewritten.
+
+### Rationale for redesign
+
+Phase 00 provenance auditing established the actual lineage of the current
+2023 RATS frame dataset:
+
+```text
+Raw per-frame metric dataset
+519,199 frames / 68 cases
+    |
+    | metric_status filtering
+    | CASE044 t=6637, all_zero_image: 1 frame removed
+    v
+Phase 09 visual_hazard_frame_flags.csv
+519,198 frames
+    |
+    | low_light_or_blackout p99 exclusion
+    | 5,192 frames removed
+    v
+Legacy color_phenotype_analyzable_frames_v1
+514,006 frames
+```
+
+The Phase 09 to Phase 07 reduction is exactly explained by
+`hazard_ge_low_light_or_blackout_p99`, with zero membership mismatches.
+
+The seven image-validity candidate columns are present in the raw per-frame
+metric data but are not propagated into the Phase 09 frame-level export:
+
+```text
+near_uniform_frame_candidate_v1
+large_whiteout_candidate_v1
+large_blackout_candidate_v1
+color_bar_or_test_pattern_candidate_v1
+photometric_failure_candidate_v1
+image_validity_problem_candidate_v1
+component_review_valid_candidate_v1
+```
+
+The propagation break occurs at the Phase 09 export step, where the explicit
+`keep_cols` selection does not retain these seven validity columns.
+
+Consequently, the audited Phase 07 run had no available hard technical reason
+columns and technical exclusion removed zero frames.
+
+Therefore, the legacy 514,006-frame color phenotype dataset must not be
+described as a technically quality-filtered dataset. It is a purpose-specific
+subset created by excluding low-light/blackout p99 frames from the Phase 09
+metric-status-eligible dataset.
+
+### Active first-report objective
+
+The first report is a **measurement-validity study**.
+
+Primary question:
+
+> Do image-derived metrics correspond to thoracic surgeons' judgment of
+> impairment of task-relevant operative-field visibility?
+
+The first report is not yet:
+
+```text
+a validated patient-risk model
+a clinical outcome-prediction model
+a validated task-critical hazard-burden model
+a causal model
+```
+
+### Construct separation
+
+The redesigned pipeline must explicitly separate three constructs.
+
+#### A. Technical image validity
+
+Technical validity concerns acquisition, decoding, or data failures that make
+a frame unsuitable for image measurement.
+
+Examples:
+
+```text
+all-zero image
+corrupt or unreadable image
+decoder failure
+no-signal frame
+test pattern / color bar
+other demonstrable acquisition or data failure
+```
+
+Technical invalidity should be cause-based.
+
+A percentile threshold on a visibility metric is not, by itself, evidence of
+technical invalidity.
+
+#### B. Visual degradation / visibility impairment
+
+This is the primary measurement construct.
+
+Candidate causes include:
+
+```text
+structural information loss
+blur / defocus
+smoke / fog / veil-like low contrast
+blood or fluid contamination
+whiteout / overexposure
+underexposure / blackout
+specular reflection
+instrument or tissue obstruction
+near-contact / red-out
+lens contamination
+```
+
+These conditions can occur during genuine surgery and must not automatically
+be discarded as technical failures.
+
+#### C. Purpose-specific analyzability
+
+Purpose-specific analyzability is a downstream analytic decision rather than a
+universal definition of image validity.
+
+Examples:
+
+```text
+technical_analyzable_frame
+visibility_validation_analyzable_frame
+color_phenotype_analyzable_frame
+structural_phenotype_analyzable_frame
+clean_reference_frame
+```
+
+Different analyses may legitimately use different exclusions. Every exclusion
+must retain a machine-readable reason and remain traceable to the original
+frame.
+
+### Mandatory frame-level data contract
+
+Every redesigned frame-level table must retain at least:
+
+```text
+case_id
+sample_time_sec
+image_path
+metric_status
+```
+
+Preserve when available:
+
+```text
+frame_idx_1based
+sample_ordinal
+segment_id
+ROI coordinates
+workflow / phase labels
+technical-validity candidate columns
+visibility component metrics required downstream
+```
+
+For the current 2023 cohort, the audited key `case_id + sample_time_sec` is
+unique and can serve as the current frame-level join key.
+
+A downstream export must not discard the identifier required to reconstruct
+image path, ROI, workflow labels, or technical-validity information.
+
+Missing required provenance or validity columns must produce an explicit error
+rather than silently defaulting to no exclusion.
+
+### Phase 00: provenance and pipeline audit
+
+**Goal:** establish what the historical pipeline actually did before modifying
+its behavior.
+
+**Status: substantially completed on 2026-09-17**
+
+Confirmed findings:
+
+1. Raw per-frame metric denominator: **519,199 frames / 68 cases**.
+2. Phase 09 denominator: **519,198 frames**.
+3. One CASE044 frame at `sample_time_sec=6637` is removed because
+   `metric_status=all_zero_image`.
+4. Legacy color phenotype manifest: **514,006 frames**.
+5. The Phase 09 to Phase 07 loss of **5,192 frames** is exactly the
+   `low_light_or_blackout p99` exclusion.
+6. Technical exclusion contributed **0 frames** in the audited Phase 07 run.
+7. Seven technical-validity candidate columns are lost at the Phase 09
+   frame-level export.
+8. The lean Phase 07 manifest loses the stable time/frame identifier required
+   by the frozen Phase 08 metadata reattachment logic.
+9. The full-metadata Phase 07 manifest represents the same 514,006-frame
+   subset and successfully reproduces the frozen Phase 08 smoke test.
+
+Phase 00 acceptance criteria:
+
+```text
+[x] pre-redesign source code frozen in Git
+[x] pre-redesign tag created and pushed
+[x] analysis environment recorded
+[x] historical commands recorded
+[x] canonical frame counts established
+[x] source -> Phase 09 -> Phase 07 lineage established
+[x] technical-validity propagation break localized
+[ ] final Phase 00 findings committed
+[ ] redesigned frame-level data contract approved before implementation
+```
+
+Historical outputs are reproducibility artifacts. Do not repair historical CSVs
+in place. Corrections must generate new, versioned outputs.
+
+### Phase 01: surgeon reference standard and measurement-validity design
+
+**Goal:** define an independent surgeon reference standard before selecting,
+tuning, or promoting image-derived visibility metrics.
+
+Minimum review fields:
+
+```text
+technical_evaluable
+visibility_impairment: 0 none / 1 mild / 2 moderate / 3 severe
+predominant_impairment_causes: multi-select
+confidence
+needs_video_context
+comment
+```
+
+Candidate causes include:
+
+```text
+blur_or_defocus
+smoke_or_fog_or_veil
+blood_or_fluid_contamination
+glare_or_overexposure
+underexposure_or_blackout
+instrument_or_tissue_obstruction
+lens_contamination
+near_contact_or_red_out
+other
+uncertain
+```
+
+Start with approximately **30-50 enriched pilot items**. The pilot determines
+whether still frames are sufficient or short video clips are required.
+
+Development and validation must be separated at the **case level**.
+Neighboring frames from the same case must not be divided between development
+and validation sets.
+
+Thresholds, transformations, metric selection, and reviewer-informed tuning
+must occur only in the development data. The validation set must not be used
+for iterative threshold tuning.
+
+### Initial candidate metrics
+
+Initial candidates include:
+
+```text
+structural_visibility_loss_v1
+veil_smoke_mean / veil_low_contrast_score_v1
+saturation_ratio / whiteout_ratio_v1
+specular_ratio / specular_like_ratio_v1
+local_obstruction_ratio  # legacy proxy; not validated as true physical obstruction
+low_light_or_blackout_ratio_v1
+```
+
+Blood-related color metrics may be reintroduced only as revised candidates if
+they are ready for independent validation.
+
+No metric becomes a validated visibility metric solely because its name is
+clinically intuitive or because it separates extreme images.
+
+### First-report success criteria
+
+The first report does not require a significant association with postoperative
+outcomes.
+
+Minimum success is:
+
+1. explicit and clinically interpretable measurement construct;
+2. reproducible and auditable frame-level pipeline;
+3. independent surgeon reference standard;
+4. case-level development / validation separation;
+5. at least one image-derived component with interpretable validation results;
+6. transparent reporting of negative or failed components.
+
+### Deferred until measurement validity is established
+
+```text
+severity * duration * task_criticality composite burden
+task-criticality weighting
+clinical outcome prediction as the primary objective
+causal interpretation
+anthracosis inference without anatomical localization
+pleural invasion prediction
+SAM2-based semantic segmentation
+real-time intervention recommendations
+```
+
+The long-term task-critical visual hazard framework remains a future project
+destination. It should be constructed only after the underlying visibility
+measurements have demonstrated validity.
+
+### Implementation gate
+
+No redesigned production pipeline should be implemented until the Phase 00
+findings and Phase 01 reference-standard schema have been reviewed.
+
+Before each implementation session, explicitly specify:
+
+```text
+files to modify
+input table
+output table
+stable frame key
+required columns
+columns that must propagate unchanged
+filter / exclusion reasons
+expected row-count invariants
+fail-fast schema checks
+tests and acceptance criteria
 ```
 
 ---
@@ -861,3 +1191,4 @@ Phase 05C: strict clinical correlation whitelist
 Phase 06: figure-ready exploratory outputs
 Phase 07: blood-like redness module
 ```
+
